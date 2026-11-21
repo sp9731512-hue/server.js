@@ -1,4 +1,3 @@
-
 const express = require("express");
 const cors = require("cors");
 
@@ -24,9 +23,58 @@ app.post("/chat", async (req, res) => {
 
     if (!apiKey) {
       return res.status(500).json({
-        error: { message: "Groq API key missing on server" }
+        error: {
+          message: "Groq API key missing on server"
+        }
       });
     }
+
+    const systemPrompt = `
+You are Mini AI, a helpful AI assistant.
+
+- Your name is Mini AI.
+- Reply naturally and helpfully.
+- If the user speaks Hindi, reply in Hindi.
+- Understand Hinglish and simple English.
+- Be polite, clear, and friendly.
+- Explain things in simple words.
+- Do not claim to know things you do not know.
+- Do not invent live information.
+- If live information is unavailable, say so honestly.
+- Respect the date and time provided in the user's system message.
+`;
+
+    const originalMessages = Array.isArray(req.body.messages)
+      ? req.body.messages
+      : [];
+
+    // Android ka existing system message preserve karo
+    const oldSystemMessages = originalMessages.filter(
+      msg => msg.role === "system"
+    );
+
+    const otherMessages = originalMessages.filter(
+      msg => msg.role !== "system"
+    );
+
+    // Purane date/time instructions ko bhi preserve karo
+    const oldSystemContent = oldSystemMessages
+      .map(msg => msg.content)
+      .filter(Boolean)
+      .join("\n");
+
+    const finalSystemMessage = {
+      role: "system",
+      content: systemPrompt + "\n" + oldSystemContent
+    };
+
+    const requestBody = {
+      ...req.body,
+      messages: [
+        finalSystemMessage,
+        ...otherMessages
+      ]
+    };
 
     const response = await fetch(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -36,16 +84,19 @@ app.post("/chat", async (req, res) => {
           "Content-Type": "application/json",
           "Authorization": "Bearer " + apiKey
         },
-        body: JSON.stringify(req.body)
+        body: JSON.stringify(requestBody)
       }
     );
 
     const data = await response.json();
-    res.status(response.status).json(data);
+
+    return res.status(response.status).json(data);
 
   } catch (error) {
-    res.status(500).json({
-      error: { message: error.message }
+    return res.status(500).json({
+      error: {
+        message: error.message
+      }
     });
   }
 });
@@ -55,4 +106,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Mini AI Backend running on port " + PORT);
 });
-
